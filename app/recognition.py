@@ -94,11 +94,24 @@ def _template_match(cell_processed: np.ndarray, templates: dict[str, np.ndarray]
     return best_letter, float(best_score)
 
 
-def _template_match_verified(cell_processed: np.ndarray, templates: dict[str, np.ndarray]) -> tuple[str, float]:
-    """Template match with structural hole verification.
+def _disambiguate_rp(cell_processed: np.ndarray) -> str:
+    """Distinguish R from P using lower-right quadrant pixel density.
 
-    If the top match expects holes that the cell doesn't have (or vice versa),
-    reject it and try the next best match with compatible hole count.
+    R has a diagonal leg extending into the lower-right area that P lacks.
+    Across 76 validated samples: R min=0.121, P max=0.056 — clean separation.
+    """
+    h, w = cell_processed.shape
+    lower_right = cell_processed[h // 2:, w // 2:]
+    total_dark = max(np.sum(cell_processed < 128), 1)
+    lr_dark = np.sum(lower_right < 128)
+    ratio = lr_dark / total_dark
+    return "R" if ratio > 0.08 else "P"
+
+
+def _template_match_verified(cell_processed: np.ndarray, templates: dict[str, np.ndarray]) -> tuple[str, float]:
+    """Template match with structural verification.
+
+    Applies hole-count verification and R/P structural disambiguation.
     """
     # Get all scores sorted
     scores = []
@@ -117,6 +130,13 @@ def _template_match_verified(cell_processed: np.ndarray, templates: dict[str, np
         expected_holes = TEMPLATE_HOLES.get(letter, 0)
         # Allow ±1 tolerance since hole detection isn't perfectly reliable
         if abs(cell_holes - expected_holes) <= 1:
+            # R/P disambiguation: if match is R or P, verify structurally
+            if letter in ("R", "P"):
+                correct = _disambiguate_rp(cell_processed)
+                if correct != letter:
+                    # Find the score for the correct letter
+                    correct_score = next((s for l, s in scores if l == correct), score)
+                    return correct, float(correct_score)
             return letter, float(score)
 
     # If nothing matches with compatible holes, return top match anyway
@@ -269,6 +289,19 @@ def recognize_cells(
             else:
                 # Same letter — boost confidence to the higher of the two
                 confidences[idx] = max(confidences[idx], tpl_conf)
+
+    # R/P structural disambiguation — apply to all cells detected as R or P
+    for i in range(len(cells)):
+        if letters[i] in ("R", "P"):
+            proc = preprocess_cell(cells[i])
+            correct = _disambiguate_rp(proc)
+            if correct != letters[i]:
+                r, c = divmod(i, n)
+                logger.info(
+                    "R/P disambig (%d,%d): %s -> %s",
+                    r, c, letters[i], correct,
+                )
+                letters[i] = correct
 
     # Handle Q -> QU
     for i in range(len(letters)):
