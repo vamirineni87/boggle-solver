@@ -20,7 +20,7 @@ class Settings:
     OCR_CONFIDENCE_THRESHOLD: float = 0.75
 
     MAX_UPLOAD_BYTES: int = 5_000_000
-    COMMON_WORDS_ONLY: bool = True
+    COMMON_WORDS_ONLY: bool = False
     DEBUG: bool = False
 
     TORCH_NUM_THREADS: int = 4
