@@ -125,8 +125,7 @@ def create_app() -> FastAPI:
             timer.summary(), settings.NTFY_TOPIC, settings.NTFY_URL
         )
 
-        if settings.DEBUG:
-            _save_debug_artifacts(image, warped, cells, board, words, timer)
+        _save_debug_artifacts(image, warped, cells, board, confidences, all_words, timer, grid_size, debug_info)
 
         return JSONResponse({
             "grid_size": grid_size,
@@ -164,27 +163,39 @@ def create_app() -> FastAPI:
     return application
 
 
-def _save_debug_artifacts(image, warped, cells, board, words, timer):
+def _save_debug_artifacts(image, warped, cells, board, confidences, words, timer, grid_size, debug_info):
     import cv2
     import json
-    import time
+    from datetime import datetime
     from pathlib import Path
     from app.cell_extract import make_cell_montage
 
     from app.settings import settings as _s
     debug_dir = _s.BASE_DIR / "debug"
     debug_dir.mkdir(exist_ok=True)
-    ts = int(time.time())
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    cv2.imwrite(str(debug_dir / f"req_{ts}_orig.jpg"), image)
-    cv2.imwrite(str(debug_dir / f"req_{ts}_warp.png"), warped)
+    cv2.imwrite(str(debug_dir / f"{ts}_orig.png"), image)
+    cv2.imwrite(str(debug_dir / f"{ts}_warp.png"), warped)
 
-    n = int(len(cells) ** 0.5)
-    montage = make_cell_montage(cells, n)
-    cv2.imwrite(str(debug_dir / f"req_{ts}_cells.png"), montage)
+    montage = make_cell_montage(cells, grid_size)
+    cv2.imwrite(str(debug_dir / f"{ts}_cells.png"), montage)
 
-    with open(debug_dir / f"req_{ts}_result.json", "w") as f:
-        json.dump({"board": board, "words": words, "timings": timer.summary()}, f, indent=2)
+    result = {
+        "timestamp": ts,
+        "grid_size": grid_size,
+        "board": board,
+        "confidences": confidences,
+        "detection_method": debug_info.get("method"),
+        "word_count": len(words),
+        "words": words,
+        "timings": timer.summary(),
+        "total_ms": timer.total_ms,
+    }
+    with open(debug_dir / f"{ts}_result.json", "w") as f:
+        json.dump(result, f, indent=2)
+
+    logger.info("Saved debug artifacts to debug/%s_*", ts)
 
 
 app = create_app()
