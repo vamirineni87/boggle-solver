@@ -1,6 +1,6 @@
 # Boggle Solver
 
-A FastAPI server that solves Boggle boards from iPhone screenshots. Take a screenshot, fire an iOS Shortcut, and get the answers as a push notification — all in under 10 seconds.
+A FastAPI server that solves Boggle boards from iPhone screenshots. Take a screenshot, fire an iOS Shortcut, and get the answers as a push notification.
 
 ## How It Works
 
@@ -9,9 +9,9 @@ iPhone Screenshot
   → iOS Shortcut (POST to server)
     → Auto-detect board region (contour detection + perspective warp)
       → Infer grid size (4x4 / 5x5 / 6x6)
-        → OCR each cell (template matching + EasyOCR fallback)
+        → Hybrid OCR (full-board EasyOCR + template matching + smart merge)
           → Solve via Trie + DFS
-            → Push notification (ntfy.sh) with 4-5 letter words
+            → Push notification (ntfy.sh)
 ```
 
 ## Prerequisites
@@ -69,7 +69,8 @@ Response:
 3. Topic name: `boggle-solver`
 4. Server: leave as `https://ntfy.sh` (default)
 5. Tap **Subscribe**
-6. **Verify it works** — run this from your PC:
+6. In the subscription settings, enable **Instant delivery**
+7. **Verify it works** — run this from your PC:
    ```bash
    curl -d "test notification" https://ntfy.sh/boggle-solver
    ```
@@ -77,7 +78,8 @@ Response:
 
 If no notification appears:
 - Check iOS Settings → Notifications → ntfy → make sure Allow Notifications is ON
-- Make sure Background App Refresh is enabled for ntfy
+- Enable **Lock Screen**, **Notification Center**, and **Banners**
+- Make sure Instant delivery is enabled in the ntfy app subscription settings
 - Try opening the ntfy app and pulling to refresh
 
 ### 4. Find your PC's IP address
@@ -119,7 +121,7 @@ Take a screenshot, tap Share, tap "Solve Boggle".
 - Tap **+** → search **"Show Notification"**
 - Text: `Boggle sent! Check ntfy for results.`
 
-4. Tap the **settings icon** (top right ⓘ):
+4. Tap the **settings icon** (top right):
    - Enable **Show in Share Sheet**
    - Under Share Sheet Types → check **Images**
 5. Tap **Done**
@@ -150,7 +152,7 @@ Grabs the latest screenshot automatically — one tap to solve.
 **Action 3 (optional)** — **Show Notification**: `Boggle solved!`
 
 3. Tap **Done**
-4. Add to Home Screen: settings icon (ⓘ) → **Add to Home Screen** → choose an icon
+4. Add to Home Screen: settings icon → **Add to Home Screen** → choose an icon
 
 **Usage**: Screenshot the Boggle board → tap the Home Screen icon
 
@@ -172,9 +174,11 @@ Runs automatically every time you take a screenshot. iOS 15.4+ required.
 
 > **Tip**: This triggers on *every* screenshot. To make it Boggle-only, add a **"Choose from Menu"** action before the HTTP request with options "Solve" / "Cancel".
 
+**Note**: iOS Shortcuts may send the image as a raw body instead of a multipart form field. The server handles both formats automatically.
+
 ## Calibration (Optional but Recommended)
 
-Calibration creates letter templates that dramatically speed up OCR (Tier A: ~20ms vs Tier B EasyOCR: ~1-3s).
+Calibration creates game-specific letter templates that improve OCR accuracy significantly.
 
 ```bash
 # Auto-detect board and verify OCR accuracy
@@ -183,7 +187,7 @@ python -m scripts.calibration screenshot.png
 # Override grid size if auto-detection is wrong
 python -m scripts.calibration screenshot.png --grid-size 5
 
-# Save cell crops as letter templates for fast Tier A matching
+# Save cell crops as letter templates for fast matching
 python -m scripts.calibration screenshot.png --save-templates
 ```
 
@@ -193,7 +197,7 @@ The calibration tool will:
 - Print OCR results per cell with confidence scores
 - Optionally save templates to `templates/letters/`
 
-Run `--save-templates` once with a clean screenshot where you know all the letters. This populates the Tier A template cache for fast recognition.
+Run `--save-templates` once with a clean screenshot where you know all the letters. This populates the template cache for accurate recognition.
 
 ## API Reference
 
@@ -201,26 +205,24 @@ Run `--save-templates` once with a clean screenshot where you know all the lette
 Health check. Returns `{"status": "ok", "trie_loaded": true}`.
 
 ### `POST /solve`
-Main endpoint. Accepts a screenshot as multipart form upload.
+Main endpoint. Accepts a screenshot as multipart form upload or raw image body.
 
-**Request**: `multipart/form-data` with field `file` (image/png or image/jpeg)
+**Request**: `multipart/form-data` with field `file`, or raw image body with `Content-Type: image/png`
 
 **Response** (JSON):
 | Field | Type | Description |
 |-------|------|-------------|
 | `grid_size` | int | Detected grid size (4, 5, or 6) |
 | `board` | string[][] | 2D array of detected letters |
-| `words` | string[] | Found words, sorted by length desc |
-| `word_count` | int | Number of words found |
+| `words` | string[] | Found words, sorted by length desc (top 50) |
+| `word_count` | int | Number of words returned |
 | `processing_time` | float | Total time in milliseconds |
 | `stage_timings` | object | Per-stage breakdown (ms) |
 | `cell_confidences` | float[][] | OCR confidence per cell (0-1) |
 
 **Errors**:
-- `400` — Not an image file or couldn't decode
+- `400` — Not an image file, couldn't decode, or empty body
 - `413` — File too large (max 5 MB)
-- `422` — Board detection failed
-- `503` — Dictionary not loaded yet (server still starting)
 
 ### `POST /debug/cells`
 Debug endpoint. Returns a PNG montage image of all extracted cells.
@@ -239,16 +241,16 @@ All settings can be overridden via environment variables:
 | `MIN_WORD_LENGTH` | `3` | Minimum word length to find |
 | `MAX_RESULTS` | `50` | Maximum words in JSON response |
 | `CELL_INSET` | `0.15` | Fraction cropped from cell edges (avoids grid lines) |
-| `OCR_CONFIDENCE_THRESHOLD` | `0.75` | Below this, cell falls back to EasyOCR |
+| `OCR_CONFIDENCE_THRESHOLD` | `0.75` | Confidence threshold for OCR |
 | `MAX_UPLOAD_BYTES` | `5000000` | Maximum upload file size |
 | `DEBUG` | `false` | Save debug artifacts per request |
 | `TORCH_NUM_THREADS` | `4` | CPU threads for EasyOCR inference |
-| `WARP_SIZE` | `600` | Board warp resolution in pixels |
+| `WARP_SIZE` | `400` | Board warp resolution in pixels |
 | `PORT` | `10001` | Server port |
 
-Example:
+Example (Windows cmd):
 ```bash
-DEBUG=true NTFY_TOPIC=my-boggle uvicorn app.server:app --host 0.0.0.0 --port 10001
+set DEBUG=true && uvicorn app.server:app --host 0.0.0.0 --port 10001
 ```
 
 ## Debug Mode
@@ -284,21 +286,22 @@ New-NetFirewallRule -DisplayName "Boggle Solver" -Direction Inbound -Protocol TC
 
 ## How the Solver Works
 
-1. **Board Detection**: OpenCV finds the largest square-ish contour in the screenshot, applies perspective warp to get a clean square. Falls back to Hough line detection, then center crop.
+1. **Board Detection**: OpenCV finds the largest square-ish contour in the screenshot, applies perspective warp to get a clean square. Falls back to cell-grouping (for boards without outer border), Hough line detection, then center crop.
 
-2. **Grid Size Inference**: Morphological operations isolate horizontal and vertical grid lines in the warped image. Counting line clusters determines N (4, 5, or 6).
+2. **Grid Size Inference**: Otsu threshold + contour counting on the warped board image. Cell-like contours are counted and mapped to the nearest grid size (16→4x4, 25→5x5, 36→6x6).
 
 3. **Cell Extraction**: The warped square is divided into an NxN grid. Each cell is cropped with a 15% inset (to avoid grid line artifacts), resized to 64x64, contrast-enhanced (CLAHE), and binarized (Otsu).
 
-4. **Two-Tier OCR**:
-   - **Tier A** (fast): Normalized cross-correlation against saved letter templates (~20-150ms total). Used when templates exist.
-   - **Tier B** (fallback): EasyOCR on cells where Tier A confidence is below 0.75 (~200-1200ms for uncertain cells only).
+4. **Hybrid OCR**:
+   - **Primary**: Full-board EasyOCR on the inverted warped image. Detects ~85-90% of cells with high accuracy.
+   - **Fallback**: Template matching (with hole-count verification) for cells EasyOCR missed. Catches thin letters like I, V that EasyOCR's text detector skips.
+   - **Smart merge**: Cross-checks EasyOCR and template results. Overrides low-confidence EasyOCR when templates disagree with higher confidence. Structural hole counting prevents B/C/G confusions.
    - Common confusions are auto-corrected: 0→O, 1→I, 5→S.
    - Q is always treated as QU (standard Boggle rule).
 
-5. **Trie + DFS Solver**: The dictionary is loaded into a prefix tree at startup. DFS explores all paths from every cell (8-directional adjacency), using bitmask tracking to prevent cell revisits. Branches are pruned when no dictionary word starts with the current prefix. Results are sorted longest-first, capped at 50.
+5. **Trie + DFS Solver**: The dictionary is loaded into a prefix tree at startup. DFS explores all paths from every cell (8-directional adjacency), using bitmask tracking to prevent cell revisits. Branches are pruned when no dictionary word starts with the current prefix. Results are sorted longest-first.
 
-6. **Push Notification**: Words of 4-5 letters are sent to ntfy.sh as a background task (doesn't block the response).
+6. **Push Notification**: Words are sent to ntfy.sh as a background task (doesn't block the response). Shows max 5 words per length group in a compact comma-separated format, with counts per length. 4x4/5x5 boards include 3-letter words; 6x6 boards start from 4-letter words.
 
 ## Running Tests
 
@@ -319,9 +322,9 @@ boggle/
     __init__.py
     server.py              FastAPI app with lifespan hooks
     settings.py            Dataclass config + env overrides
-    board_detect.py        Contour/Hough detection + perspective warp
+    board_detect.py        Contour/cell-grouping/Hough detection + perspective warp
     cell_extract.py        Cell cropping + CLAHE/Otsu preprocessing
-    recognition.py         Template matching + EasyOCR two-tier OCR
+    recognition.py         Hybrid OCR: EasyOCR + template matching + smart merge
     solver.py              Trie + DFS solver with bitmask visited
     notifier.py            ntfy.sh async push notifications
     metrics.py             Per-stage timing utility
