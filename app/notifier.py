@@ -28,7 +28,7 @@ async def send_notification(
         for length in sorted(by_length.keys()):
             if length < min_len:
                 continue
-            selected.extend(by_length[length][:5])
+            selected.extend(by_length[length][:10])
 
         counts = " | ".join(f"{l}L:{len(g)}" for l, g in sorted(by_length.items()) if l >= min_len)
         body = ",".join(selected) + "\n\n" + counts
