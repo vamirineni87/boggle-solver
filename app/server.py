@@ -25,8 +25,9 @@ def create_app() -> FastAPI:
         torch.set_num_threads(settings.TORCH_NUM_THREADS)
 
         from app.solver import load_trie
-        logger.info("Loading dictionary from %s", settings.DICTIONARY_PATH)
-        _trie = load_trie(str(settings.DICTIONARY_PATH), settings.MIN_WORD_LENGTH)
+        dict_path = settings.DICTIONARY_COMMON_PATH if settings.COMMON_WORDS_ONLY else settings.DICTIONARY_PATH
+        logger.info("Loading dictionary from %s (common_only=%s)", dict_path, settings.COMMON_WORDS_ONLY)
+        _trie = load_trie(str(dict_path), settings.MIN_WORD_LENGTH)
         logger.info("Trie loaded")
 
         from app.recognition import load_templates, init_easyocr

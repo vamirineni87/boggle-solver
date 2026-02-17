@@ -20,14 +20,18 @@ class Settings:
     OCR_CONFIDENCE_THRESHOLD: float = 0.75
 
     MAX_UPLOAD_BYTES: int = 5_000_000
+    COMMON_WORDS_ONLY: bool = True
     DEBUG: bool = False
 
     TORCH_NUM_THREADS: int = 4
     WARP_SIZE: int = 400
     PORT: int = 10001
 
+    DICTIONARY_COMMON_PATH: Path = field(init=False)
+
     def __post_init__(self):
         self.DICTIONARY_PATH = self.BASE_DIR / "dictionary.txt"
+        self.DICTIONARY_COMMON_PATH = self.BASE_DIR / "dictionary_common.txt"
         self.TEMPLATES_DIR = self.BASE_DIR / "templates" / "letters"
 
         # Override from environment

@@ -6,3 +6,5 @@ debug/
 calibration_output/
 data/
 *.egg-info/
+word_frequencies.txt
+dictionary - Copy.txt
