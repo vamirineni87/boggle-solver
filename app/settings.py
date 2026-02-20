@@ -52,4 +52,44 @@ class Settings:
                     setattr(self, fld, env_val)
 
 
+EDITABLE_FIELDS: dict[str, type] = {
+    "NOTIFY_WORDS_PER_GROUP": int,
+    "MAX_RESULTS": int,
+    "MIN_WORD_LENGTH": int,
+    "COMMON_WORDS_ONLY": bool,
+    "DEBUG": bool,
+    "NTFY_TOPIC": str,
+    "OCR_CONFIDENCE_THRESHOLD": float,
+}
+
+
+def update_settings(cfg: "Settings", **kwargs) -> dict[str, str]:
+    """Update editable settings in-place. Returns dict of errors (empty on success)."""
+    errors = {}
+    for key, value in kwargs.items():
+        if key not in EDITABLE_FIELDS:
+            errors[key] = f"not an editable field"
+            continue
+        expected_type = EDITABLE_FIELDS[key]
+        try:
+            if expected_type is bool:
+                if isinstance(value, bool):
+                    coerced = value
+                elif isinstance(value, str):
+                    coerced = value.lower() in ("1", "true", "yes")
+                else:
+                    coerced = bool(value)
+            else:
+                coerced = expected_type(value)
+            setattr(cfg, key, coerced)
+        except (ValueError, TypeError) as e:
+            errors[key] = f"invalid value: {e}"
+    return errors
+
+
+def get_editable_settings(cfg: "Settings") -> dict:
+    """Return current values of all editable fields."""
+    return {key: getattr(cfg, key) for key in EDITABLE_FIELDS}
+
+
 settings = Settings()
