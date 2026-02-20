@@ -20,7 +20,7 @@ def test_basic_solve():
              "DIG", "DIGS", "ONE", "ONES", "APE", "NOD", "NOG", "SON", "REPO",
              "OPEN", "NOPE", "PEON", "SING", "SIGN"]
     trie = _make_trie(words)
-    result = solve(board, 4, trie)
+    result, _ = solve(board, 4, trie)
     assert "CAT" in result
     assert "BONE" in result
     assert "CATS" in result
@@ -38,7 +38,7 @@ def test_qu_cell():
     ]
     words = ["QUIT", "QUITE", "QUEST", "QUITS", "SAT", "SET", "TEN", "DEN", "STAR"]
     trie = _make_trie(words)
-    result = solve(board, 3, trie)
+    result, _ = solve(board, 3, trie)
     assert "QUIT" in result
 
 
@@ -50,7 +50,7 @@ def test_no_revisit():
     ]
     # "ABA" requires revisiting cell (0,0) — should not be found
     trie = _make_trie(["ABA", "AB", "ABC"])
-    result = solve(board, 2, trie)
+    result, _ = solve(board, 2, trie)
     assert "ABA" not in result
     assert "AB" in result
 
@@ -58,7 +58,7 @@ def test_no_revisit():
 def test_empty_results_for_no_matches():
     board = [["Z", "Z"], ["Z", "Z"]]
     trie = _make_trie(["CAT", "DOG"])
-    result = solve(board, 2, trie)
+    result, _ = solve(board, 2, trie)
     assert result == []
 
 
@@ -73,7 +73,7 @@ def test_max_results_cap():
     words = ["CAT", "CATS", "CAR", "CARE", "BONE", "BONES", "REP", "PEN", "PONE",
              "DIG", "DIGS", "ONE", "ONES", "APE", "NOD", "NOG", "SON", "REPO"]
     trie = _make_trie(words)
-    result = solve(board, 4, trie, max_results=3)
+    result, _ = solve(board, 4, trie, max_results=3)
     assert len(result) <= 3
 
 
@@ -86,7 +86,7 @@ def test_sort_order():
     ]
     words = ["CAT", "CATS", "BONE", "BONES", "REP"]
     trie = _make_trie(words)
-    result = solve(board, 4, trie)
+    result, _ = solve(board, 4, trie)
     # Longest first
     for i in range(len(result) - 1):
         assert len(result[i]) >= len(result[i + 1]) or (
@@ -120,7 +120,7 @@ def test_performance_with_full_dictionary(tmp_path):
     ]
 
     start = time.perf_counter()
-    result = solve(board, 4, trie)
+    result, _ = solve(board, 4, trie)
     elapsed = time.perf_counter() - start
 
     assert elapsed < 0.5, f"Solver took {elapsed:.3f}s (expected <0.5s)"

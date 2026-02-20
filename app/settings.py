@@ -21,6 +21,7 @@ class Settings:
 
     MAX_UPLOAD_BYTES: int = 5_000_000
     COMMON_WORDS_ONLY: bool = False
+    NOTIFY_WORDS_PER_GROUP: int = 20
     DEBUG: bool = False
 
     TORCH_NUM_THREADS: int = 4

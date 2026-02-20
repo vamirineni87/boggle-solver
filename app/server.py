@@ -114,7 +114,7 @@ def create_app() -> FastAPI:
         logger.info("Board %dx%d: %s", grid_size, grid_size, board_str)
 
         with timer.stage("solve"):
-            all_words = solve_board(board, grid_size, _trie, 0)
+            all_words, word_positions = solve_board(board, grid_size, _trie, 0)
 
         words = all_words[:settings.MAX_RESULTS]
         logger.info("Found %d words (returning top %d)", len(all_words), len(words))
@@ -122,7 +122,8 @@ def create_app() -> FastAPI:
         # Send notification in background (with ALL words so 4-5 letter filter works)
         background_tasks.add_task(
             send_notification, all_words, grid_size, board,
-            timer.summary(), settings.NTFY_TOPIC, settings.NTFY_URL
+            timer.summary(), settings.NTFY_TOPIC, settings.NTFY_URL,
+            settings.NOTIFY_WORDS_PER_GROUP, word_positions
         )
 
         _save_debug_artifacts(image, warped, cells, board, confidences, all_words, timer, grid_size, debug_info)

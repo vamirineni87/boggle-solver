@@ -1,5 +1,4 @@
 import logging
-import random
 from collections import defaultdict
 
 import httpx
@@ -14,6 +13,8 @@ async def send_notification(
     timings: dict,
     topic: str,
     ntfy_url: str = "https://ntfy.sh",
+    words_per_group: int = 10,
+    word_positions: dict[str, tuple[int, int]] | None = None,
 ):
     """Send solve results to ntfy.sh. Best-effort — failures are logged, not raised."""
     try:
@@ -30,8 +31,10 @@ async def send_notification(
             if length < min_len:
                 continue
             group = by_length[length]
-            random.shuffle(group)
-            selected.extend(group[:10])
+            # Sort by starting position on board (top-to-bottom, left-to-right)
+            if word_positions:
+                group.sort(key=lambda w: word_positions.get(w, (grid_size, grid_size)))
+            selected.extend(group[:words_per_group])
 
         counts = " | ".join(f"{l}L:{len(g)}" for l, g in sorted(by_length.items()) if l >= min_len)
         body = ",".join(selected) + "\n\n" + counts

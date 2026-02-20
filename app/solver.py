@@ -32,9 +32,14 @@ def load_trie(path: str, min_length: int = 3) -> Trie:
     return trie
 
 
-def solve(board: list[list[str]], grid_size: int, trie: Trie, max_results: int = 50) -> list[str]:
-    """Solve the Boggle board using DFS with Trie prefix pruning and bitmask visited tracking."""
+def solve(board: list[list[str]], grid_size: int, trie: Trie, max_results: int = 50) -> tuple[list[str], dict[str, tuple[int, int]]]:
+    """Solve the Boggle board using DFS with Trie prefix pruning and bitmask visited tracking.
+
+    Returns (words, positions) where positions maps each word to its
+    topmost-leftmost starting cell (row, col).
+    """
     found: set[str] = set()
+    word_starts: dict[str, tuple[int, int]] = {}
     total_cells = grid_size * grid_size
 
     # Pre-expand cell values: most are single chars, "QU" is two chars
@@ -57,7 +62,7 @@ def solve(board: list[list[str]], grid_size: int, trie: Trie, max_results: int =
                     adj.append(nr * grid_size + nc)
         neighbors.append(adj)
 
-    def dfs(idx: int, node: TrieNode, path: list[str], visited: int):
+    def dfs(idx: int, node: TrieNode, path: list[str], visited: int, start_idx: int):
         chars = cell_chars[idx]
         if chars == "?":
             return
@@ -73,17 +78,22 @@ def solve(board: list[list[str]], grid_size: int, trie: Trie, max_results: int =
         if current.is_word:
             word = "".join(path)
             found.add(word)
+            sr, sc = divmod(start_idx, grid_size)
+            # Keep the topmost-leftmost starting position
+            if word not in word_starts or (sr, sc) < word_starts[word]:
+                word_starts[word] = (sr, sc)
 
         if current.children:  # prune if no further prefixes
             for nidx in neighbors[idx]:
                 if not (visited & (1 << nidx)):
-                    dfs(nidx, current, path, visited | (1 << nidx))
+                    dfs(nidx, current, path, visited | (1 << nidx), start_idx)
 
         path.pop()
 
     for start in range(total_cells):
-        dfs(start, trie.root, [], 1 << start)
+        dfs(start, trie.root, [], 1 << start, start)
 
     # Sort: longest first, then alphabetical
     result = sorted(found, key=lambda w: (-len(w), w))
-    return result[:max_results] if max_results > 0 else result
+    result = result[:max_results] if max_results > 0 else result
+    return result, word_starts
