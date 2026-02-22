@@ -94,6 +94,20 @@ def _template_match(cell_processed: np.ndarray, templates: dict[str, np.ndarray]
     return best_letter, float(best_score)
 
 
+def _disambiguate_cg(cell_processed: np.ndarray) -> str:
+    """Distinguish C from G using center-right pixel density.
+
+    G has a horizontal bar/spur extending inward from the right side at
+    mid-height that C lacks. We check a center-right region for dark pixels.
+    """
+    h, w = cell_processed.shape
+    center_right = cell_processed[int(h * 0.4):int(h * 0.6), int(w * 0.45):int(w * 0.8)]
+    total_dark = max(np.sum(cell_processed < 128), 1)
+    cr_dark = np.sum(center_right < 128)
+    ratio = cr_dark / total_dark
+    return "G" if ratio > 0.10 else "C"
+
+
 def _disambiguate_rp(cell_processed: np.ndarray) -> str:
     """Distinguish R from P using lower-right quadrant pixel density.
 
@@ -130,11 +144,15 @@ def _template_match_verified(cell_processed: np.ndarray, templates: dict[str, np
         expected_holes = TEMPLATE_HOLES.get(letter, 0)
         # Allow ±1 tolerance since hole detection isn't perfectly reliable
         if abs(cell_holes - expected_holes) <= 1:
-            # R/P disambiguation: if match is R or P, verify structurally
+            # Structural disambiguation for confusable pairs
             if letter in ("R", "P"):
                 correct = _disambiguate_rp(cell_processed)
                 if correct != letter:
-                    # Find the score for the correct letter
+                    correct_score = next((s for l, s in scores if l == correct), score)
+                    return correct, float(correct_score)
+            if letter in ("C", "G"):
+                correct = _disambiguate_cg(cell_processed)
+                if correct != letter:
                     correct_score = next((s for l, s in scores if l == correct), score)
                     return correct, float(correct_score)
             return letter, float(score)
@@ -290,7 +308,7 @@ def recognize_cells(
                 # Same letter — boost confidence to the higher of the two
                 confidences[idx] = max(confidences[idx], tpl_conf)
 
-    # R/P structural disambiguation — apply to all cells detected as R or P
+    # Structural disambiguation — apply to all confusable pairs
     for i in range(len(cells)):
         if letters[i] in ("R", "P"):
             proc = preprocess_cell(cells[i])
@@ -299,6 +317,16 @@ def recognize_cells(
                 r, c = divmod(i, n)
                 logger.info(
                     "R/P disambig (%d,%d): %s -> %s",
+                    r, c, letters[i], correct,
+                )
+                letters[i] = correct
+        elif letters[i] in ("C", "G"):
+            proc = preprocess_cell(cells[i])
+            correct = _disambiguate_cg(proc)
+            if correct != letters[i]:
+                r, c = divmod(i, n)
+                logger.info(
+                    "C/G disambig (%d,%d): %s -> %s",
                     r, c, letters[i], correct,
                 )
                 letters[i] = correct
