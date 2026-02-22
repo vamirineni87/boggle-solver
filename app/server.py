@@ -170,11 +170,26 @@ def create_app() -> FastAPI:
 
     @application.post("/api/settings")
     async def api_post_settings(request: Request):
+        global _trie
         from app.settings import update_settings, get_editable_settings
         body = await request.json()
+
+        # Snapshot values that require trie rebuild
+        old_common = settings.COMMON_WORDS_ONLY
+        old_min_len = settings.MIN_WORD_LENGTH
+
         errors = update_settings(settings, **body)
         if errors:
             return JSONResponse({"updated": get_editable_settings(settings), "errors": errors}, status_code=400)
+
+        # Rebuild trie if dictionary source or min word length changed
+        if settings.COMMON_WORDS_ONLY != old_common or settings.MIN_WORD_LENGTH != old_min_len:
+            from app.solver import load_trie
+            dict_path = settings.DICTIONARY_COMMON_PATH if settings.COMMON_WORDS_ONLY else settings.DICTIONARY_PATH
+            logger.info("Rebuilding trie (common_only=%s, min_length=%d)", settings.COMMON_WORDS_ONLY, settings.MIN_WORD_LENGTH)
+            _trie = load_trie(str(dict_path), settings.MIN_WORD_LENGTH)
+            logger.info("Trie rebuilt")
+
         logger.info("Settings updated: %s", body)
         return JSONResponse({"updated": get_editable_settings(settings)})
 
